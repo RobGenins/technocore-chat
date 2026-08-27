@@ -1639,9 +1639,15 @@ def _sweep_orphan_locks(root: Path, now: float, touched: dict[str, set[str]]) ->
     holds splits the lock domain, and the next writer locks a fresh inode. Sweeping the
     orphans instead keeps directory entries bounded while never touching the lock of a room
     anyone still writes to. Deliberately IDLE_SECONDS even for a room the stillborn rule took
-    at 24h — the lock outlives its data by design, and waiting the full week is what keeps a
+    at 24h - the lock outlives its data by design, and waiting the full week is what keeps a
     writer recreating that room from having its lock unlinked underneath it. The drift is
     bounded by the room cap: at most a week of churn in empty files.
+
+    The lock's mtime reflects when the lock was released, not when the room was last written.
+    For an idle-reaped room both timestamps are the same age, so the grace period below
+    uses 2x IDLE_SECONDS: one week of room idle + one week of lock orphan = two weeks
+    before the lock is touched. This prevents races where a room is reaped at the instant
+    its lock's idle window expires.
     """
     for sub, suffix in (("rooms", ".jsonl.lock"), ("notes", ".txt.lock")):
         base = f"{root / sub}{os.sep}"
@@ -1658,7 +1664,7 @@ def _sweep_orphan_locks(root: Path, now: float, touched: dict[str, set[str]]) ->
                 # directory fd out of the walk would buy a rounding error and cost an fd
                 # lifetime per namespace. The Path was the expense, not the syscall.
                 data = entry.path[: -len(".lock")]
-                if os.access(data, os.F_OK) or now - entry.stat().st_mtime <= IDLE_SECONDS:
+                if os.access(data, os.F_OK) or now - entry.stat().st_mtime <= IDLE_SECONDS * 2:
                     continue
                 os.unlink(entry.path)
                 touched[sub].add(_emptied(base, entry.path, sub == "notes"))
