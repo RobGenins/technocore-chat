@@ -5,8 +5,8 @@
     "core/config.py": 63,
     "core/didkey.py": 57,
     "core/limit.py": 183,
-    "core/store.py": 1000,
-    "core_total": 3000
+    "core/store.py": 937,
+    "core_total": 2263
   },
   "files": {
     "core/app.py": {
