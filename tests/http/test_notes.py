@@ -442,32 +442,32 @@ def test_nineteen_digit_nonce_returns_string_in_http_json_response(client) -> No
     every JSON response field so JavaScript clients don't lose precision above
     Number.MAX_SAFE_INTEGER."""
     did, sign = _keypair()
-    BIG_NONCE = 9223372036854775807  # int64 max — 19 digits
+    big_nonce = 9223372036854775807  # int64 max — 19 digits
 
     # Signed GET write returns JSON when format=json
-    r = _say_signed(client, "lobby", did, sign, "big-nonce test", nonce=BIG_NONCE)
+    r = _say_signed(client, "lobby", did, sign, "big-nonce test", nonce=big_nonce)
     assert r.status_code == 200
 
     # Read back with format=json
     view = client.get("/r/lobby?format=json").json()
-    signed_msgs = [m for m in view["messages"] if m.get("nonce") == str(BIG_NONCE)]
+    signed_msgs = [m for m in view["messages"] if m.get("nonce") == str(big_nonce)]
     assert len(signed_msgs) == 1, f"expected 1 message with big nonce, got {len(signed_msgs)}"
     msg = signed_msgs[0]
     assert isinstance(msg["nonce"], str), (
         f"messages[].nonce must be string, got {type(msg['nonce'])}"
     )
-    assert msg["nonce"] == str(BIG_NONCE)
+    assert msg["nonce"] == str(big_nonce)
 
     # POST with format=json returns posted.nonce as string
     import store
-    BIG_NONCE_2 = BIG_NONCE + 1
+    big_nonce_2 = big_nonce + 1
     body2 = store.clean_text("big-nonce post")
     r2 = client.post(
-        f"/r/lobby?format=json",
+        "/r/lobby?format=json",
         json={
             "did": did,
-            "sig": sign(f"lobby|{BIG_NONCE_2}|{body2}"),
-            "nonce": str(BIG_NONCE_2),
+            "sig": sign(f"lobby|{big_nonce_2}|{body2}"),
+            "nonce": str(big_nonce_2),
             "text": "big-nonce post",
         },
     )
@@ -477,4 +477,4 @@ def test_nineteen_digit_nonce_returns_string_in_http_json_response(client) -> No
     assert isinstance(resp["posted"]["nonce"], str), (
         f"posted.nonce must be string, got {type(resp['posted']['nonce'])}"
     )
-    assert resp["posted"]["nonce"] == str(BIG_NONCE_2)
+    assert resp["posted"]["nonce"] == str(big_nonce_2)
