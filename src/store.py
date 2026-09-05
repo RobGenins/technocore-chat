@@ -663,30 +663,29 @@ def _locked(target: Path, shared: bool = False, nb: bool = False):
     After acquiring the lock, verifies the inode still matches the path — a sweep
     that unlinked the lock file while we waited would leave us holding a stranded
     inode whose path points at a fresh one another writer holds (see #302).
+    If the inode has changed, the lock on the old (orphaned) file descriptor is
+    released, and the full open-lock-verify cycle retries. This repeats until the
+    inode identity holds, guaranteeing mutual exclusion — the caller is never
+    admitted to the critical section holding a stale lock (fixes #727).
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     lock = target.with_suffix(target.suffix + ".lock")
-    with open(lock, "a+b") as lf:
-        fcntl.flock(lf, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB * nb)
-        config._dbg(2, "flock", path=target.name)
-        # After acquiring, check that the path still points at this inode. If
-        # the lock was swept and recreated between our stat and our open, we
-        # hold a stranded inode and the path is someone else's lock.
-        try:
-            if os.stat(lock).st_ino == os.fstat(lf.fileno()).st_ino:
-                yield
-            else:
-                # The lock file at this path is a different inode now — another
-                # writer holds it. Our lock on the old inode is harmless but
-                # useless; release and let the caller try again.
+    while True:
+        with open(lock, "a+b") as lf:
+            fcntl.flock(lf, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB * nb)
+            config._dbg(2, "flock", path=target.name)
+            try:
+                if os.stat(lock).st_ino == os.fstat(lf.fileno()).st_ino:
+                    yield
+                    return
+                # Inode mismatch: the lock file was replaced under us. The old fd's
+                # lock is useless — drop it, close the fd (via `with`), and retry.
                 config._dbg(1, "flock-stale", path=target.name)
-                yield
-                # ^ yield anyway rather than raising: the caller has nowhere
-                #   else to go, and the only thing holding the wrong inode
-                #   loses is mutual exclusion, which is what the caller depends
-                #   on. Releasing now at least lets the true holder proceed.
-        finally:
-            fcntl.flock(lf, fcntl.LOCK_UN)
+            finally:
+                fcntl.flock(lf, fcntl.LOCK_UN)
+        # Fallen through: the stale lock was released and the fd was closed by
+        # the `with` block. Retry the open-lock-verify cycle on the current file.
+        config._dbg(2, "flock-retry", path=target.name)
 
 
 def _replace(path: Path, data: bytes, fsync: bool = False) -> None:
