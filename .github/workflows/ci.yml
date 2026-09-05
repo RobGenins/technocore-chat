@@ -26,7 +26,7 @@ jobs:
     name: "mcp worker bundles"
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: github.repository == 'flop-labs/technocore-chat' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     permissions:
       contents: read
     steps:
@@ -67,7 +67,7 @@ jobs:
     name: "lint + tests + image"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: github.repository == 'flop-labs/technocore-chat' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     permissions:
       contents: read
     steps:
@@ -160,7 +160,7 @@ jobs:
     name: "openapi contract"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: github.repository == 'flop-labs/technocore-chat' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     permissions:
       contents: read
     steps:
