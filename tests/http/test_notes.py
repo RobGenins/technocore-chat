@@ -435,3 +435,46 @@ def test_signed_writes_pay_the_write_budget_like_any_other(client, monkeypatch):
             _say_signed(client, "lobby", did, sign, f"m{i}", nonce=i).status_code for i in (1, 2, 3)
         ]
         assert codes == [200, 200, 429]
+
+
+def test_nineteen_digit_nonce_returns_string_in_http_json_response(client) -> None:
+    """Fixes #711: a 19-digit (int64 max) nonce must be serialized as a string in
+    every JSON response field so JavaScript clients don't lose precision above
+    Number.MAX_SAFE_INTEGER."""
+    did, sign = _keypair()
+    BIG_NONCE = 9223372036854775807  # int64 max — 19 digits
+
+    # Signed GET write returns JSON when format=json
+    r = _say_signed(client, "lobby", did, sign, "big-nonce test", nonce=BIG_NONCE)
+    assert r.status_code == 200
+
+    # Read back with format=json
+    view = client.get("/r/lobby?format=json").json()
+    signed_msgs = [m for m in view["messages"] if m.get("nonce") == str(BIG_NONCE)]
+    assert len(signed_msgs) == 1, f"expected 1 message with big nonce, got {len(signed_msgs)}"
+    msg = signed_msgs[0]
+    assert isinstance(msg["nonce"], str), (
+        f"messages[].nonce must be string, got {type(msg['nonce'])}"
+    )
+    assert msg["nonce"] == str(BIG_NONCE)
+
+    # POST with format=json returns posted.nonce as string
+    import store
+    BIG_NONCE_2 = BIG_NONCE + 1
+    body2 = store.clean_text("big-nonce post")
+    r2 = client.post(
+        f"/r/lobby?format=json",
+        json={
+            "did": did,
+            "sig": sign(f"lobby|{BIG_NONCE_2}|{body2}"),
+            "nonce": str(BIG_NONCE_2),
+            "text": "big-nonce post",
+        },
+    )
+    assert r2.status_code == 200, r2.text[:200]
+    resp = r2.json()
+    assert "posted" in resp, "POST write response should contain posted"
+    assert isinstance(resp["posted"]["nonce"], str), (
+        f"posted.nonce must be string, got {type(resp['posted']['nonce'])}"
+    )
+    assert resp["posted"]["nonce"] == str(BIG_NONCE_2)

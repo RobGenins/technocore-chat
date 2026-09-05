@@ -459,6 +459,10 @@ def respond(request: Request, view: dict, body_text: str | None = None, note: st
         for msg in view.get("messages", []):
             if "nonce" in msg and isinstance(msg["nonce"], int):
                 msg["nonce"] = str(msg["nonce"])
+        for key in ("posted",):
+            rec = view.get(key)
+            if rec and "nonce" in rec and isinstance(rec["nonce"], int):
+                rec["nonce"] = str(rec["nonce"])
         return Response(
             json.dumps(view, ensure_ascii=False, indent=1) + "\n",
             media_type="application/json",
