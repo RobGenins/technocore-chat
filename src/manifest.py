@@ -232,7 +232,7 @@ _MESSAGE_SCHEMA = {
             ),
         },
         "text": {"type": "string", "description": "Single-line body, <= 4096 characters."},
-        "nonce": {"type": "integer", "description": "Present on signed messages only."},
+        "nonce": {"type": "string", "description": "Present on signed messages only. Served as a string so JSON clients do not lose precision above Number.MAX_SAFE_INTEGER."},
         "sig": {
             **_SIG_SCHEMA,
             "description": (

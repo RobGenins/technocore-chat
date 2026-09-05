@@ -202,6 +202,8 @@ def dupe_refused(
             live = tuple(t for t in seen if now - t <= window)
             if len(live) >= max_copies:
                 _dupes[key] = live[-max_copies:]  # prune, but never extend on a refusal
+                _dupes.move_to_end(key)  # promote on refusal too, so the cap evicts stale
+                # entries, not the phrase actively being hammered (#358)
                 return True
             _dupes[key] = (live + (now,))[-max_copies:]
         else:

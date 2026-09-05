@@ -951,12 +951,6 @@ def read_messages(
         # When since is None and head_seq exists (room has messages but all expired),
         # report the actual head seq so the cursor doesn't reset to 0 (#287).
         last_seq = since if since is not None else (head_seq or 0)
-    # Cast nonce to string in the response so JSON clients don't lose precision
-    # above Number.MAX_SAFE_INTEGER (9007199254740991). Nonces can reach 19 digits
-    # (int64 ceiling) and orjson serializes raw ints as JSON numbers (#711).
-    for m in out:
-        if "nonce" in m and isinstance(m["nonce"], int):
-            m["nonce"] = str(m["nonce"])
     return {
         "room": room,
         "count": len(out),

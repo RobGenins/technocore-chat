@@ -453,6 +453,12 @@ def render(view: dict) -> str:
 
 def respond(request: Request, view: dict, body_text: str | None = None, note: str = "") -> Response:
     if request.query_params.get("format") == "json":
+        # Cast nonces to string so JSON clients don't lose precision above
+        # Number.MAX_SAFE_INTEGER (9007199254740991). Nonces can reach 19 digits
+        # (int64 ceiling) and int serializes as a JSON number (#711).
+        for msg in view.get("messages", []):
+            if "nonce" in msg and isinstance(msg["nonce"], int):
+                msg["nonce"] = str(msg["nonce"])
         return Response(
             json.dumps(view, ensure_ascii=False, indent=1) + "\n",
             media_type="application/json",

@@ -51,7 +51,9 @@ def test_a_lost_conditional_write_carries_the_value_after_the_first_line(client)
     assert lost.status_code == 409
     lines = lost.text.rstrip("\n").split("\n")
     assert lines[0].startswith("409") and "world" not in lines[0]
-    assert lines[-1] == "world"
+    # The value is wrapped with an UNTRUSTED CONTENT banner (#291)
+    assert "UNTRUSTED CONTENT" in lost.text
+    assert "world" in lost.text
 
 
 def test_webmcp_tool_results_carry_the_whole_server_reply(client):
@@ -175,7 +177,7 @@ def test_full_length_signed_message_is_postable_with_escaped_json(client):
     )
     assert r.status_code == 200, (len(escaped), r.text[:200])
     stored = client.get(f"/r/{room}?format=json").json()["messages"][0]
-    assert stored["from"] == did and stored["nonce"] == nonce and stored["text"] == text_value
+    assert stored["from"] == did and stored["nonce"] == str(nonce) and stored["text"] == text_value
 
 
 def test_a_signed_write_is_attributed_to_the_key_not_a_nickname(client):
@@ -184,7 +186,7 @@ def test_a_signed_write_is_attributed_to_the_key_not_a_nickname(client):
     assert r.status_code == 200
     view = client.get("/r/lobby?format=json").json()
     assert view["messages"][0]["from"] == did  # json carries the DID in full
-    assert view["messages"][0]["nonce"] == 1
+    assert view["messages"][0]["nonce"] == "1"
     # the text view abbreviates: 56 base58 characters per line would be the whole budget
     body = client.get("/r/lobby").text
     assert f"<{did[len('did:key:') :][:4]}…{did[-4:]}> signed hello" in body
