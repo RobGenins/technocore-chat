@@ -89,7 +89,10 @@ MAX_TOTAL_ROOM_BYTES = 5 << 30
 #
 # = MAX_TOTAL_ROOM_BYTES // MAX_ROOMS on purpose: the floor times the cap is the budget, so
 # even the worst case — every room at its floor — lands exactly on the number.
-RESERVED_ROOM_BYTES = MAX_TOTAL_ROOM_BYTES // MAX_ROOMS
+# Floor at 1 byte so _compact(keep=0) never fires on every append. When
+# CHAT_MAX_ROOMS exceeds MAX_TOTAL_ROOM_BYTES the division yields 0,
+# which makes _ring_limit return 0 and _compact keep nothing (fixes #581).
+RESERVED_ROOM_BYTES = max(1, MAX_TOTAL_ROOM_BYTES // MAX_ROOMS)
 # How many rooms exist and how many bytes they occupy — "count bytes", the same two-integer
 # format and the same machinery as NOTES_FILE below, so one atomic replace keeps both halves
 # describing the same store.
@@ -675,7 +678,14 @@ def _locked(target: Path, shared: bool = False, nb: bool = False):
             fcntl.flock(lf, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB * nb)
             config._dbg(2, "flock", path=target.name)
             try:
-                if os.stat(lock).st_ino == os.fstat(lf.fileno()).st_ino:
+                try:
+                    ino_match = os.stat(lock).st_ino == os.fstat(lf.fileno()).st_ino
+                except FileNotFoundError:
+                    # The lock file was swept between our open() and this stat().
+                    # Our fd points at an orphaned inode; release and retry.
+                    config._dbg(1, "flock-gone", path=target.name)
+                    ino_match = False
+                if ino_match:
                     yield
                     return
                 # Inode mismatch: the lock file was replaced under us. The old fd's
@@ -941,6 +951,12 @@ def read_messages(
         # When since is None and head_seq exists (room has messages but all expired),
         # report the actual head seq so the cursor doesn't reset to 0 (#287).
         last_seq = since if since is not None else (head_seq or 0)
+    # Cast nonce to string in the response so JSON clients don't lose precision
+    # above Number.MAX_SAFE_INTEGER (9007199254740991). Nonces can reach 19 digits
+    # (int64 ceiling) and orjson serializes raw ints as JSON numbers (#711).
+    for m in out:
+        if "nonce" in m and isinstance(m["nonce"], int):
+            m["nonce"] = str(m["nonce"])
     return {
         "room": room,
         "count": len(out),
