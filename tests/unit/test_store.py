@@ -1372,3 +1372,17 @@ def test_service_stats_measures_room_bytes_until_a_reap_settles_them(tmp_path):
     store.append(tmp_path, "openroom", "nick", "hi")
     assert store.room_bytes_used(tmp_path) == 0  # nothing reaped yet
     assert store.service_stats(tmp_path)["bytes"]["rooms"] == store._count_rooms(tmp_path)[1] > 0
+
+
+def test_nonce_rejection_mentions_bounded_tail_scan(tmp_path):
+    """A rejected nonce describes the bounded tail scan, not a final 'last one used' claim.
+    Older writes for the same key may exist beyond the window, and the error says so."""
+    import store
+
+    did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+    store.append(tmp_path, "lobby", "bot", "first", did=did, nonce=100)
+    with pytest.raises(store.StoreError) as exc:
+        store.append(tmp_path, "lobby", "bot", "second", did=did, nonce=50)
+    msg = str(exc.value)
+    assert "highest nonce found" in msg, "error must mention bounded tail scan"
+    assert "recent tail" in msg, "error must say 'recent tail' not 'last one this key used'"
