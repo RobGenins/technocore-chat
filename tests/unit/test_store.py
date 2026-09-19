@@ -978,6 +978,26 @@ def test_ephemeral_ttl_boundary_is_inclusive_then_expires(tmp_path, monkeypatch)
     assert view["first_seq"] == 2 and view["last_seq"] == 2
 
 
+def test_fully_expired_ephemeral_read_returns_head_seq_not_zero(tmp_path, monkeypatch):
+    """A read_messages(since=None) on an ephemeral room whose every record has
+    expired must return the room's head seq as last_seq, not 0 — or the cursor
+    rewinds and a caller polling for new messages sees the same gap forever."""
+    import store
+    from datetime import UTC, datetime, timedelta
+
+    stale = datetime.now(UTC) - timedelta(seconds=store.EPHEMERAL_TTL_SECONDS + 60)
+    monkeypatch.setattr(store, "_now", lambda: stale.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+    store.append(tmp_path, "e-expired-read", "bot", "gone")
+    monkeypatch.undo()
+
+    head = store.last_seq(tmp_path, "e-expired-read")
+    view = store.read_messages(tmp_path, "e-expired-read", since=None)
+    assert view["count"] == 0
+    assert view["last_seq"] == head, (
+        f"empty read of an expired ephemeral room must report {head}, got {view['last_seq']}"
+    )
+
+
 def test_message_counter_survives_the_reaper(tmp_path):
     """The reason the counter exists. Summing per-room `last_seq` would report 0 here, so a
     digest's "messages since last time" would go *negative* every time a room is reaped."""
