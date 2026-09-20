@@ -909,7 +909,7 @@ def read_messages(
         "first_seq": out[0]["seq"] if out else None,
         "last_seq": out[-1]["seq"]
         if out
-        else (since if since is not None else last_seq(root, room)),
+        else (since if since is not None else (last_seq(root, room) if path.exists() else 0)),
         "generation": room_generation(root, room),
         "messages": out,
     }

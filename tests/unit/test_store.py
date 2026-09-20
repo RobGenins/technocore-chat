@@ -982,8 +982,9 @@ def test_fully_expired_ephemeral_read_returns_head_seq_not_zero(tmp_path, monkey
     """A read_messages(since=None) on an ephemeral room whose every record has
     expired must return the room's head seq as last_seq, not 0 — or the cursor
     rewinds and a caller polling for new messages sees the same gap forever."""
-    import store
     from datetime import UTC, datetime, timedelta
+
+    import store
 
     stale = datetime.now(UTC) - timedelta(seconds=store.EPHEMERAL_TTL_SECONDS + 60)
     monkeypatch.setattr(store, "_now", lambda: stale.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
@@ -996,6 +997,23 @@ def test_fully_expired_ephemeral_read_returns_head_seq_not_zero(tmp_path, monkey
     assert view["last_seq"] == head, (
         f"empty read of an expired ephemeral room must report {head}, got {view['last_seq']}"
     )
+
+
+def test_read_reaped_room_returns_zero_last_seq(tmp_path):
+    """A read_messages(since=None) on a reaped (absent) room must return 0 as
+    last_seq, not the floor from the seq state — a fresh empty room reports 0."""
+    import store
+
+    store.append(tmp_path, "d-reap-read", "bot", "hello")
+    store._bump(tmp_path)
+    _age(store.room_path(tmp_path, "d-reap-read"), store.IDLE_SECONDS + 60)
+    (tmp_path / ".reaped").unlink(missing_ok=True)
+    store._reap(tmp_path)
+
+    assert not store.room_path(tmp_path, "d-reap-read").exists()
+    view = store.read_messages(tmp_path, "d-reap-read", since=None)
+    assert view["count"] == 0
+    assert view["last_seq"] == 0, f"reaped room read must report 0, got {view['last_seq']}"
 
 
 def test_message_counter_survives_the_reaper(tmp_path):
