@@ -43,6 +43,7 @@ def _finite_env(name: str, default: str) -> float:
 
 ROOT = Path(os.environ.get("CHAT_ROOT", "/data"))
 
+
 # Floored at 1: the bucket arithmetic divides by this, so a zero or negative value
 # configured by hand would turn every rate-limited route into a 500 rather than into the
 # refusal the operator presumably meant. There is no "disable" setting for the same reason
@@ -54,9 +55,7 @@ def _rate(name: str, default: str) -> int:
     try:
         v = int(raw)
     except ValueError:
-        raise SystemExit(
-            f"FATAL: {name}={raw!r} is not an integer"
-        ) from None
+        raise SystemExit(f"FATAL: {name}={raw!r} is not an integer") from None
     v = max(1, v)
     try:
         float(v)  # catch overflow at boot, not at request time
@@ -67,6 +66,7 @@ def _rate(name: str, default: str) -> int:
             f"above ~1.8e308 crashes every rate-limited route at runtime."
         ) from None
     return v
+
 
 RATE_READ = _rate("CHAT_RATE_READ", "120")  # requests/min/IP
 RATE_WRITE = _rate("CHAT_RATE_WRITE", "30")
