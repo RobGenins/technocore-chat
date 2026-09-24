@@ -512,7 +512,14 @@ def _static_cacheable(resp: Response) -> Response:
     30 minutes of worst-case edge staleness, which is *past* the 15-minute autoupdate poll —
     the manual could then outlive the deploy that changed it, which is the one thing this
     window exists to prevent. 60 caps the total at 360s, comfortably under the poll.
+
+    Without CHAT_PUBLIC_URL the documents print this origin's URLs from the request's own
+    Host, so they vary on it and must say so: a shared cache that forwards the caller's Host
+    but keys only on the path would otherwise hand everyone the copy made for whichever Host
+    arrived first — `Host: evil.example` included. With it set, nothing here reads Host.
     """
+    if not config.PUBLIC_URL:
+        resp.headers.add_vary_header("Host")
     return _edge_cacheable(resp, config.STATIC_CACHE_SECONDS, 60)
 
 
@@ -1636,6 +1643,20 @@ def _note_write_gate(ns: str, key: str, value: str, signer: str | None) -> Respo
                 "take over a conversation already in progress.",
                 403,
             )
+        # No owner, so no allow-list here can be current: only an owner writes one. The
+        # reaper retires an owner note on its own clock, so a list planted just before its
+        # owner aged out would otherwise be inherited by whoever claims the name next — and
+        # kept for good once their room is live. Emptied rather than deleted: `none` names
+        # no key, and overwriting keeps the note and its count, so the new owner's own list
+        # is an overwrite too — an unlink would leave the count one high and refuse it at a
+        # full namespace until the next reap. The room's nonce is left alone.
+        #
+        # Under the owner note's own lock, re-checked: a claim that raced this one and won
+        # writes its owner note under that lock, and can only write a list after it, so a
+        # claimant that read "no owner" before losing can never empty the winner's list.
+        with store._locked(owner := store.note_path(config.ROOT, store.OWNERS_NS, key)):
+            if not owner.exists() and store.note_get(config.ROOT, store.ALLOW_NS, key):
+                store.note_set(config.ROOT, store.ALLOW_NS, key, "none")
         return None
     owner = store.note_get(config.ROOT, store.OWNERS_NS, key)
     if owner is None:
