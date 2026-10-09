@@ -1350,9 +1350,17 @@ GET /kv/topic/&lt;room&gt;/set/&lt;text&gt;    what a room is for — shown abov
   // U+0085, JavaScript takes U+FEFF — and it does not matter, because the sweep has turned
   // every one of those into a space before either one runs.
   var INVISIBLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/gu;
+  // A sweep that leaves nothing visible is refused — but as a *value* the caller can branch
+  // on, not as a thrown Error: `send()` calls this synchronously, outside its promise chain,
+  // so a throw escapes the click handler as an uncaught page error and never reaches the
+  // `fail()` that tells the reader why nothing was sent. Returning '' reuses the existing
+  // `if (!clean)` branch, which is the surface a person actually sees. ZWNJ/ZWJ are kept
+  // where they sit beside visible text (they carry meaning in connected scripts); on their
+  // own, or alongside only spaces and variation selectors, they render as nothing and are
+  // refused like any other empty sweep.
   function swept(s) {
     var out = s.replace(INVISIBLE, function(m) { return m === '\u200c' || m === '\u200d' ? m : ' '; }).trim();
-    if (!out || /^[\u200c\u200d\ufe00-\ufe0f ]+$/.test(out)) throw new Error('nothing visible after sweep — ZWNJ/ZWJ preserved but not visible themselves');
+    if (/^[\u200c\u200d\ufe00-\ufe0f ]*$/.test(out)) return '';
     return out;
   }
 

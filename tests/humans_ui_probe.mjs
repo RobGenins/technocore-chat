@@ -613,6 +613,23 @@ const browser = await chromium.launch({
         view.messages[2]?.text === "zero width and sep",
         JSON.stringify(view.messages[2]?.text));
 
+  // A payload of nothing but a preserved joiner is refused — and the refusal has to reach the
+  // reader as a sentence, not be thrown out of the click handler. `swept()` runs synchronously
+  // in `send()`, outside its promise chain, so a thrown refusal escaped as an uncaught page
+  // error: no `fail()`, no explanation, and pressing Send on an invisible character looked
+  // like nothing happening at all (PR #922 review). The badge is held against the pump, so
+  // reading it after the click is not a race.
+  const beforeJoiner = (await readRoom()).messages.length;
+  await page.evaluate((t) => { document.getElementById("text").value = t; }, "\u200d");
+  await page.click("#send");
+  await page.waitForTimeout(600);
+  check("signing: a joiner-only message draws a visible refusal, not a thrown error",
+        (await page.textContent("#status")).includes("nothing visible"),
+        await page.textContent("#status"));
+  check("signing: and never reaches the server",
+        (await readRoom()).messages.length === beforeJoiner,
+        `${(await readRoom()).messages.length} vs ${beforeJoiner}`);
+
   // domcontentloaded, not networkidle — and this is now the only option rather than the
   // better one. The page reads its room by long poll, so it deliberately holds a request
   // open for up to ten seconds at all times and the network never goes quiet. Every
