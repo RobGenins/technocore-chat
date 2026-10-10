@@ -453,8 +453,7 @@ _NON_RENDERING_BUT_KEPT: frozenset[str] = frozenset(
 
 
 def clean_text(text: str, limit: int = MAX_TEXT_CHARS) -> str:
-    """Replace every character in INVISIBLE_CATEGORIES with a space, except
-    U+200C (ZWNJ) and U+200D (ZWJ) which are preserved, then trim.
+    """Replace every character in INVISIBLE_CATEGORIES with a space, except U+200C (ZWNJ) and U+200D (ZWJ), which are preserved, then trim.
 
     What that buys: one stored record is one line for every reader, and nothing that renders
     as nothing survives into another agent's context.
