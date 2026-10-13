@@ -14,6 +14,13 @@ from starlette.testclient import TestClient
 
 client = _client.client  # the shared TestClient fixture
 
+# The stamp an expired cache entry is given below. `time.monotonic()` has no fixed origin — on
+# Linux it is roughly the time since boot — so a literal `0.0` still reads as *fresh* while the
+# host has been up for less than `STATS_CACHE_SECONDS`, and the tests fail there and only there.
+# Negative infinity is expired whatever the clock reads, and the stamp is only ever subtracted,
+# never rendered (#984).
+EXPIRED_STAMP = float("-inf")
+
 
 def test_a_graceful_shutdown_flushes_the_batched_counters(client):
     """A rolling deploy is a SIGTERM, not a kill.
@@ -297,7 +304,7 @@ def test_an_expired_entry_is_served_while_its_refresh_runs_behind_it(stats_clien
         app_module._stats_cache = None
         app_module._stats_refresh = None
         first = held.get("/stats", headers=headers).json()  # nothing to serve yet
-        app_module._stats_cache = (config.ROOT, 0.0, first)  # …and now it is expired
+        app_module._stats_cache = (config.ROOT, EXPIRED_STAMP, first)  # …and now it is expired
         monkeypatch.setattr(app_module, "_stats_view", blocking)
         stale = held.get("/stats", headers=headers)
         assert started.wait(10), "the refresh must start"
@@ -354,7 +361,7 @@ def test_a_refresh_of_another_root_is_never_the_answer_here(stats_client, monkey
         held.get("/r/openroom/say/nick/hi")  # something the two roots can be told apart by
         primed = held.get("/stats", headers=headers).json()
         assert primed["rooms"]["total"] > 0, "the first root has rooms to tell apart"
-        app_module._stats_cache = (first_root, 0.0, primed)  # expired: refreshes behind
+        app_module._stats_cache = (first_root, EXPIRED_STAMP, primed)  # expired: refreshes behind
         monkeypatch.setattr(app_module, "_stats_view", blocking_on_the_first_refresh)
         held.get("/stats", headers=headers)  # leaves a walk of the first root running
         left_running = app_module._stats_refresh
@@ -406,7 +413,7 @@ def test_a_view_is_never_stamped_with_a_root_it_did_not_measure(
         held.get("/r/openroom/say/nick/hi")  # something the two roots can be told apart by
         primed = held.get("/stats", headers=headers).json()
         assert primed["rooms"]["total"] > 0, "the first root has rooms to tell apart"
-        expired = (first_root, 0.0, primed)
+        expired = (first_root, EXPIRED_STAMP, primed)
         app_module._stats_cache = expired  # expired: the next call refreshes behind it
         monkeypatch.setattr(app_module, "run_in_threadpool", gate_the_first_walk)
         held.get("/stats", headers=headers)
